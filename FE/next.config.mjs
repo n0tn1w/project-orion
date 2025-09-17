@@ -2,7 +2,7 @@
 const backendOrigin = process.env.BACKEND_ORIGIN || "http://localhost:5000"; // override in prod
 
 const nextConfig = {
-  output: "standalone", // ⬅️ enables minimal server bundle for one-folder deploy
+  output: "standalone",
 
   eslint: { ignoreDuringBuilds: true },
   typescript: { ignoreBuildErrors: true },

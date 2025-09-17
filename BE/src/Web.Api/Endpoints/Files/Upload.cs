@@ -21,7 +21,7 @@ internal sealed class Upload : IEndpoint
         app.MapPost("files/upload", async (
             [FromForm] Request request,
             ICommandHandler<UploadFileCommand, string> handler,
-            CancellationToken cancellationToken ) =>
+            CancellationToken cancellationToken) =>
         {
             UploadFileCommand command = new UploadFileCommand(
                 request.FileStream.OpenReadStream(),
@@ -34,6 +34,10 @@ internal sealed class Upload : IEndpoint
             return result.Match(Results.Ok, CustomResults.Problem);
         })
         .DisableAntiforgery()
+        .WithMetadata(new RequestFormLimitsAttribute 
+        {
+            MultipartBodyLengthLimit = 12L * 1024 * 1024 * 1024
+        })
         .WithTags(Tags.Files);
     }
 }

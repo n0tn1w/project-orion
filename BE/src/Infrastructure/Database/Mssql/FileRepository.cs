@@ -5,9 +5,11 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Application.Abstractions.Data;
+using Application.Files.Get;
 using Domain.Files;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Formatters;
+using SharedKernel;
 
 namespace Infrastructure.Database.Mssql;
 public sealed class FileRepository : IFileRepository
@@ -21,7 +23,7 @@ public sealed class FileRepository : IFileRepository
         return Task.FromResult(entity!);
     }
 
-    public async Task<string> Save(Stream fileStream, string fileName, string contentType, long length, CancellationToken ct = default)
+    public async Task<string> SaveAsync(Stream fileStream, string fileName, string contentType, long length, CancellationToken ct = default)
     {
         string fileId = Guid.NewGuid().ToString("N").Substring(0, 4);
 
@@ -34,7 +36,8 @@ public sealed class FileRepository : IFileRepository
             FileData = bytes,
             FileName = fileName,
             ContentType = contentType,
-            Length = length
+            Length = length,
+            LastModified = DateTime.UtcNow,
         })
             )
         {
@@ -42,5 +45,24 @@ public sealed class FileRepository : IFileRepository
         }
 
         return fileId;
+    }
+
+    public Task<IEnumerable<FileMetadata>> GetAll(CancellationToken ct = default)
+    {
+        List<FileMetadata> result = new List<FileMetadata>();
+        foreach (KeyValuePair<string, FileEntity> kvp in _inMemoryDb)
+        {
+            string key = kvp.Key;
+            FileEntity value = kvp.Value;
+
+            result.Add(new FileMetadata()
+            {
+                FileId = key,
+                FileName = value.FileName,
+                LastModified = value.LastModified
+            });
+        }
+
+        return Task.FromResult<IEnumerable<FileMetadata>>(result);
     }
 }

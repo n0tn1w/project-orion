@@ -13,4 +13,5 @@ public sealed class FileEntity : Entity
     public string FileName { get; set; }
     public string ContentType { get; set; }
     public long Length { get; set; }
+    public DateTime LastModified { get; set; }
 }

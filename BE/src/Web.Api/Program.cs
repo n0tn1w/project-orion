@@ -4,6 +4,7 @@ using HealthChecks.UI.Client;
 using Infrastructure;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Http.Features;
 using Serilog;
 using Web.Api;
 using Web.Api.Extensions;
@@ -19,6 +20,10 @@ builder.Services
     .AddPresentation()
     .AddInfrastructure(builder.Configuration);
 
+builder.Services.Configure<FormOptions>(options => options.MultipartBodyLengthLimit = long.MaxValue);
+
+builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = long.MaxValue);
+
 builder.Services.AddEndpoints(Assembly.GetExecutingAssembly());
 builder.Services.AddAntiforgery(options => options.HeaderName = "X-CSRF-TOKEN"); //TODO Remove this eventually
 
@@ -29,10 +34,10 @@ if (app.Environment.IsDevelopment())
 
 }
 
-app.MapHealthChecks("health", new HealthCheckOptions
-{
-    ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
-});
+//app.MapHealthChecks("health", new HealthCheckOptions
+//{
+//    ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
+//});
 
 app.UseRequestContextLogging();
 

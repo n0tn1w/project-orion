@@ -9,7 +9,7 @@ using Web.Api.Infrastructure;
 
 namespace Web.Api.Endpoints.Files;
 
-internal sealed class GetByName : IEndpoint
+internal sealed class Download : IEndpoint
 {
     public void MapEndpoint(IEndpointRouteBuilder app)
     {

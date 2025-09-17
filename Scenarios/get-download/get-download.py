@@ -1,7 +1,7 @@
 import requests
 from pathlib import Path
 
-FILE_NAME = "19be"
+FILE_NAME = "1372"
 url = f"http://localhost:5000/files/download/{FILE_NAME}"
 
 SCRIPT_DIR = Path(__file__).resolve().parent

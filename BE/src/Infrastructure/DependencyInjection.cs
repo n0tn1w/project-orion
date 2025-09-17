@@ -20,8 +20,8 @@ public static class DependencyInjection
         IConfiguration configuration) =>
         services
             .AddServices()
-            .AddDatabase()
-            .AddHealthChecks(configuration);
+            .AddDatabase();
+            //.AddHealthChecks(configuration);
 
     private static IServiceCollection AddServices(this IServiceCollection services)
     {
@@ -37,12 +37,12 @@ public static class DependencyInjection
         return services;
     }
 
-    private static IServiceCollection AddHealthChecks(this IServiceCollection services, IConfiguration configuration)
-    {
-        services
-            .AddHealthChecks()
-            .AddNpgSql(configuration.GetConnectionString("Database")!);
+    //private static IServiceCollection AddHealthChecks(this IServiceCollection services, IConfiguration configuration)
+    //{
+    //    services
+    //        .AddHealthChecks();
+    //        .AddNpgSql(configuration.GetConnectionString("Database")!);
 
-        return services;
-    }
+    //    return services;
+    //}
 }

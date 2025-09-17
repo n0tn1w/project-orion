@@ -14,7 +14,7 @@ internal sealed class UploadFileCommandHandler(IFileRepository repostiory) : ICo
 {
     public async Task<Result<string>> Handle(UploadFileCommand command, CancellationToken cancellationToken)
     {
-        string id = await repostiory.Save(
+        string id = await repostiory.SaveAsync(
             fileStream: command.fileStream,
             fileName: command.fileName,
             contentType: command.contentType ?? "application/octet-stream",

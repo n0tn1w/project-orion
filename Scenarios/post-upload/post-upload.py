@@ -1,8 +1,8 @@
 import requests
 from pathlib import Path
 
-# API_URL = "http://localhost:5000/files/upload"
-API_URL = "http://192.168.0.4:5000/files/upload"
+API_URL = "http://localhost:5000/files/upload"
+#API_URL = "http://192.168.0.4:5000/files/upload"
 FILE_PATH = Path(__file__).resolve().parent / "notes.txt"
 
 with FILE_PATH.open("rb") as f:
