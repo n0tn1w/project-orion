@@ -13,11 +13,12 @@ internal sealed class GetFileByNameQueryHandler(IFileRepository repository) : IQ
 {
     public async Task<Result<FileResponse>> Handle(GetFileByNameQuery query, CancellationToken cancellationToken)
     {
-        FileEntity file = await repository.GetByName(query.fileName);
+        FileEntity file = await repository.GetByName(query.fileName, cancellationToken);
         return Result<FileResponse>.Success(new FileResponse() { 
-            FileData = file.FileData,
+            Stream = file.Stream,
             FileName = file.FileName,
             ContentType = file.ContentType,
+            LastModified = file.LastModified,
             Length = file.Length,
         });
     }

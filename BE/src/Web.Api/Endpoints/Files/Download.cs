@@ -25,12 +25,15 @@ internal sealed class Download : IEndpoint
                 return Results.NotFound();
             }
 
-            IResult a = Results.File(
-                fileContents: handlerResult?.Value?.FileData!,
-                contentType: handlerResult?.Value?.ContentType!,
-                fileDownloadName: handlerResult?.Value?.FileName!
+            FileResponse f = handlerResult.Value;
+
+            return Results.File(
+                fileStream: f.Stream,
+                contentType: f.ContentType,
+                fileDownloadName: f.FileName,
+                lastModified: f.LastModified,
+                enableRangeProcessing: true
             );
-            return a;
 
         })
         .DisableAntiforgery()

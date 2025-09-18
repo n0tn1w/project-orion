@@ -6,7 +6,12 @@ import { useState, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Upload, File, CheckCircle, AlertCircle, Loader2 } from "lucide-react"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Label } from "@/components/ui/label"
+import { Progress } from "@/components/ui/progress"
+import { Upload, File, CheckCircle, AlertCircle, Loader2, Zap, CloudUpload } from "lucide-react"
+
+type UploadMethod = "standard" | "tus"
 
 export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null)
@@ -14,6 +19,8 @@ export default function UploadPage() {
   const [uploadResult, setUploadResult] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [dragActive, setDragActive] = useState(false)
+  const [uploadMethod, setUploadMethod] = useState<UploadMethod>("standard")
+  const [uploadProgress, setUploadProgress] = useState(0)
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -51,29 +58,103 @@ export default function UploadPage() {
     setUploading(true)
     setError(null)
     setUploadResult(null)
+    setUploadProgress(0)
 
     try {
-      const formData = new FormData()
-      formData.append("FileStream", file, file.name)
-
-      const response = await fetch("api/files/upload", {
-        method: "POST",
-        body: formData,
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`Upload failed: ${response.status} - ${errorText}`)
+      if (uploadMethod === "standard") {
+        await handleStandardUpload()
+      } else {
+        await handleTusUpload()
       }
-
-      const result = await response.text()
-      setUploadResult(result)
-      setFile(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed")
     } finally {
       setUploading(false)
+      setUploadProgress(0)
     }
+  }
+
+  const handleStandardUpload = async () => {
+    if (!file) return
+
+    const formData = new FormData()
+    formData.append("FileStream", file, file.name)
+
+    const response = await fetch("api/files/upload", {
+      method: "POST",
+      body: formData,
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`Upload failed: ${response.status} - ${errorText}`)
+    }
+
+    const result = await response.text()
+    setUploadResult(result)
+    setFile(null)
+  }
+
+  const handleTusUpload = async () => {
+    if (!file) return
+
+    const chunkSize = 160 * 1024 * 1024 // 160MB chunks
+    const totalSize = file.size
+    let uploadedBytes = 0
+
+    // Create upload session
+    const createResponse = await fetch("/api/files/tus", {
+      method: "POST",
+      headers: {
+        "Upload-Length": totalSize.toString(),
+        "Upload-Metadata": `filename ${btoa(file.name)},contentType ${btoa(file.type || "application/octet-stream")}`,
+        "Tus-Resumable": "1.0.0",
+      },
+    })
+
+    if (!createResponse.ok) {
+      throw new Error(`Failed to create upload session: ${createResponse.status}`)
+    }
+
+    const loc = createResponse.headers.get("Location")!
+    const uploadUrl = loc.startsWith("/") ? `/api${loc}` : loc
+    if (!uploadUrl) {
+      throw new Error("No upload URL received")
+    }
+
+    // Upload file in chunks
+    while (uploadedBytes < totalSize) {
+      const chunk = file.slice(uploadedBytes, Math.min(uploadedBytes + chunkSize, totalSize))
+
+      const patchResponse = await fetch(uploadUrl, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/offset+octet-stream",
+          "Upload-Offset": uploadedBytes.toString(),
+          "Tus-Resumable": "1.0.0",
+        },
+        body: chunk,
+      })
+
+      if (!patchResponse.ok) {
+        throw new Error(`Upload chunk failed: ${patchResponse.status}`)
+      }
+
+      uploadedBytes += chunk.size
+      setUploadProgress((uploadedBytes / totalSize) * 100)
+    }
+
+    // Get the file ID from the final response
+    const finalResponse = await fetch(uploadUrl, {
+      method: "HEAD",
+      headers: {
+        "Tus-Resumable": "1.0.0",
+      },
+    })
+
+    const fileId = finalResponse.headers.get("Upload-Metadata") || "Upload completed"
+    setUploadResult(fileId)
+    setFile(null)
   }
 
   return (
@@ -86,13 +167,54 @@ export default function UploadPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
+            <CloudUpload className="h-5 w-5" />
+            Upload Method
+          </CardTitle>
+          <CardDescription>Choose your preferred upload method</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <RadioGroup value={uploadMethod} onValueChange={(value: UploadMethod) => setUploadMethod(value)}>
+            <div className="flex items-center space-x-2 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
+              <RadioGroupItem value="standard" id="standard" />
+              <Label htmlFor="standard" className="flex-1 cursor-pointer">
+                <div className="flex items-center gap-2">
+                  <Upload className="h-4 w-4 text-gray-600" />
+                  <div>
+                    <p className="font-medium text-gray-900">Standard Upload</p>
+                    <p className="text-sm text-gray-500">Fast and reliable for most files</p>
+                  </div>
+                </div>
+              </Label>
+            </div>
+            <div className="flex items-center space-x-2 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
+              <RadioGroupItem value="tus" id="tus" />
+              <Label htmlFor="tus" className="flex-1 cursor-pointer">
+                <div className="flex items-center gap-2">
+                  <Zap className="h-4 w-4 text-gray-600" />
+                  <div>
+                    <p className="font-medium text-gray-900">TUS Protocol</p>
+                    <p className="text-sm text-gray-500">Resumable uploads for large files</p>
+                  </div>
+                </div>
+              </Label>
+            </div>
+          </RadioGroup>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5" />
             File Upload
           </CardTitle>
-          <CardDescription>Choose a file from your device or drag and drop it here</CardDescription>
+          <CardDescription>
+            {uploadMethod === "standard"
+              ? "Choose a file from your device or drag and drop it here"
+              : "Large file upload with resumable capability"}
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Drag and Drop Area */}
           <div
             className={`relative rounded-lg border-2 border-dashed p-8 text-center transition-colors ${
               dragActive ? "border-black bg-gray-50" : "border-gray-300 hover:border-gray-400"
@@ -121,7 +243,6 @@ export default function UploadPage() {
             </div>
           </div>
 
-          {/* Selected File Display */}
           {file && (
             <div className="flex items-center gap-3 rounded-lg border border-gray-200 p-3">
               <File className="h-5 w-5 text-gray-600" />
@@ -144,24 +265,32 @@ export default function UploadPage() {
             </div>
           )}
 
-          {/* Upload Button */}
+          {uploading && uploadMethod === "tus" && uploadProgress > 0 && (
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm text-gray-600">
+                <span>Upload Progress</span>
+                <span>{Math.round(uploadProgress)}%</span>
+              </div>
+              <Progress value={uploadProgress} className="w-full" />
+            </div>
+          )}
+
           <Button onClick={handleUpload} disabled={!file || uploading} className="w-full" size="lg">
             {uploading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Uploading...
+                {uploadMethod === "tus" ? "Uploading chunks..." : "Uploading..."}
               </>
             ) : (
               <>
-                <Upload className="mr-2 h-4 w-4" />
-                Upload File
+                {uploadMethod === "tus" ? <Zap className="mr-2 h-4 w-4" /> : <Upload className="mr-2 h-4 w-4" />}
+                {uploadMethod === "tus" ? "Start TUS Upload" : "Upload File"}
               </>
             )}
           </Button>
         </CardContent>
       </Card>
 
-      {/* Success Result */}
       {uploadResult && (
         <Alert className="border-green-200 bg-green-50">
           <CheckCircle className="h-4 w-4 text-green-600" />
@@ -178,7 +307,6 @@ export default function UploadPage() {
         </Alert>
       )}
 
-      {/* Error Display */}
       {error && (
         <Alert className="border-red-200 bg-red-50">
           <AlertCircle className="h-4 w-4 text-red-600" />

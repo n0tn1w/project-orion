@@ -8,6 +8,7 @@ namespace Application.Abstractions.Data;
 public interface IFileRepository
 {
     Task<string> SaveAsync(Stream fileStream, string fileName, string contentType, long length, CancellationToken ct = default);
-    Task<FileEntity> GetByName(string fileName);
+    Task<FileEntity> GetByName(string fileName, CancellationToken ct = default);
+    Task<bool> DeleteByName(string fileName, CancellationToken ct = default);
     Task<IEnumerable<FileMetadata>> GetAll(CancellationToken ct = default);
 }

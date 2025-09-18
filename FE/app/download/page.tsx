@@ -1,14 +1,31 @@
 "use client"
 
-import type React from "react"
-
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Download, FileText, CheckCircle, AlertCircle, Loader2, Search, Calendar } from "lucide-react"
+import {
+  Download,
+  FileText,
+  CheckCircle,
+  AlertCircle,
+  Loader2,
+  Search,
+  Calendar,
+  Trash2,
+  ArrowUpDown,
+} from "lucide-react"
+import { Input } from "@/components/ui/input"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 interface FileMetadata {
   fileName: string
@@ -16,9 +33,9 @@ interface FileMetadata {
   lastModified: string
 }
 
+type SortOrder = "asc" | "desc"
+
 export default function DownloadPage() {
-  const [fileId, setFileId] = useState("")
-  const [downloading, setDownloading] = useState(false)
   const [downloadSuccess, setDownloadSuccess] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -27,18 +44,30 @@ export default function DownloadPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [loadingFiles, setLoadingFiles] = useState(true)
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null)
+  const [sortOrder, setSortOrder] = useState<SortOrder>("desc")
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [fileToDelete, setFileToDelete] = useState<FileMetadata | null>(null)
+  const [deletingFileId, setDeletingFileId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchFileMetadata()
   }, [])
 
   useEffect(() => {
-    if (searchQuery.trim() === "") {
-      setFilteredFiles(files)
-    } else {
-      setFilteredFiles(files.filter((file) => file.fileName.toLowerCase().includes(searchQuery.toLowerCase())))
+    let filtered = files
+
+    if (searchQuery.trim() !== "") {
+      filtered = files.filter((file) => file.fileName.toLowerCase().includes(searchQuery.toLowerCase()))
     }
-  }, [files, searchQuery])
+
+    filtered = [...filtered].sort((a, b) => {
+      const dateA = new Date(a.lastModified).getTime()
+      const dateB = new Date(b.lastModified).getTime()
+      return sortOrder === "asc" ? dateA - dateB : dateB - dateA
+    })
+
+    setFilteredFiles(filtered)
+  }, [files, searchQuery, sortOrder])
 
   const fetchFileMetadata = async () => {
     try {
@@ -59,23 +88,65 @@ export default function DownloadPage() {
     }
   }
 
-  const handleDownload = async (downloadFileId?: string) => {
-    const targetFileId = downloadFileId || fileId.trim()
+  const toggleSort = () => {
+    setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))
+  }
 
-    if (!targetFileId) {
-      setError("Please enter a file ID")
-      return
-    }
+  const handleDeleteFile = async (file: FileMetadata) => {
+    setDeletingFileId(file.fileId)
+    setError(null)
 
-    setDownloading(true)
-    if (downloadFileId) {
-      setDownloadingFileId(downloadFileId)
+    try {
+      const response = await fetch(`api/files/delete/${encodeURIComponent(file.fileName)}`, {
+        method: "DELETE",
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`Delete failed: ${response.status} - ${errorText}`)
+      }
+
+      await fetchFileMetadata()
+      setDownloadSuccess(`${file.fileName} deleted successfully`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Delete failed")
+    } finally {
+      setDeletingFileId(null)
+      setDeleteDialogOpen(false)
+      setFileToDelete(null)
     }
+  }
+
+  const openDeleteDialog = (file: FileMetadata) => {
+    setFileToDelete(file)
+    setDeleteDialogOpen(true)
+  }
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  }
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return "0 Bytes"
+    const k = 1024
+    const sizes = ["Bytes", "KB", "MB", "GB"]
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
+  }
+
+  const handleDownload = async (downloadFileId: string) => {
+    setDownloadingFileId(downloadFileId)
     setError(null)
     setDownloadSuccess(null)
 
     try {
-      const response = await fetch(`api/files/download/${targetFileId}`, {
+      const response = await fetch(`api/files/download/${downloadFileId}`, {
         method: "GET",
       })
 
@@ -85,17 +156,18 @@ export default function DownloadPage() {
       }
 
       // Get filename from Content-Disposition header
-      let filename = targetFileId
+      let filename = downloadFileId
       const contentDisposition =
         response.headers.get("Content-Disposition") || response.headers.get("content-disposition")
-      
+
       if (contentDisposition) {
-        const matchStar = contentDisposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
-        const match = contentDisposition.match(/filename\s*=\s*("?)([^";]+)\1/);
+        const matchStar = contentDisposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i)
+        const match = contentDisposition.match(/filename\s*=\s*("?)([^";]+)\1/)
 
         if (matchStar) {
-          filename = decodeURIComponent(matchStar[1]);
+          filename = decodeURIComponent(matchStar[1])
         } else if (match) {
+          filename = match[2]
         }
       }
 
@@ -115,37 +187,17 @@ export default function DownloadPage() {
       window.URL.revokeObjectURL(url)
 
       setDownloadSuccess(filename)
-      if (!downloadFileId) {
-        setFileId("")
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Download failed")
     } finally {
-      setDownloading(false)
       setDownloadingFileId(null)
     }
-  }
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      handleDownload()
-    }
-  }
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
   }
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <div className="text-center">
-        <h1 className="text-3xl font-bold text-black">Download Files</h1>
+        <h1 className="text-3xl font-bold text-black">Your Files</h1>
         <p className="mt-2 text-gray-600">Browse and download your files from Project Orion</p>
       </div>
 
@@ -155,18 +207,29 @@ export default function DownloadPage() {
             <Search className="h-5 w-5" />
             Search Files
           </CardTitle>
-          <CardDescription>Search through your uploaded files by name</CardDescription>
+          <CardDescription>Find your files quickly by searching their names</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-            <Input
-              type="text"
-              placeholder="Search files by name..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
+          <div className="flex gap-3 items-center">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <Input
+                type="text"
+                placeholder="Search files by name..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 h-10"
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={toggleSort}
+              className="flex items-center gap-2 px-3 py-2 h-10 text-sm bg-transparent whitespace-nowrap"
+                          >
+              <ArrowUpDown className="h-3 w-3" />
+              {sortOrder === "desc" ? "Newest" : "Oldest"}
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -175,35 +238,44 @@ export default function DownloadPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5" />
-            Your Files
+            File Library
           </CardTitle>
           <CardDescription>
-            {loadingFiles ? "Loading files..." : `${filteredFiles.length} file(s) found`}
+            {loadingFiles ? "Loading your files..." : `${filteredFiles.length} file(s) available`}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {loadingFiles ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-              <span className="ml-2 text-gray-600">Loading files...</span>
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+              <span className="ml-3 text-gray-600">Loading your files...</span>
             </div>
           ) : filteredFiles.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              {searchQuery ? "No files match your search" : "No files uploaded yet"}
+            <div className="text-center py-12">
+              <FileText className="mx-auto h-12 w-12 text-gray-300 mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                {searchQuery ? "No files match your search" : "No files uploaded yet"}
+              </h3>
+              <p className="text-gray-500">
+                {searchQuery ? "Try adjusting your search terms" : "Upload your first file to get started"}
+              </p>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="grid gap-3">
               {filteredFiles.map((file) => (
                 <div
                   key={file.fileId}
-                  className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="group flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:border-gray-300 hover:bg-gray-50 transition-all duration-200"
                 >
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <FileText className="h-5 w-5 text-gray-400 flex-shrink-0" />
+                  <div className="flex items-center gap-4 flex-1 min-w-0">
+                    <div className="flex-shrink-0">
+                      <div className="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center group-hover:bg-gray-200 transition-colors">
+                        <FileText className="h-5 w-5 text-gray-600" />
+                      </div>
+                    </div>
                     <div className="min-w-0 flex-1">
-                      <p className="font-medium text-black truncate">{file.fileName}</p>
-                      <div className="flex items-center gap-4 text-sm text-gray-500">
-                        <span>ID: {file.fileId}</span>
+                      <p className="font-medium text-gray-900 truncate text-lg">{file.fileName}</p>
+                      <div className="flex items-center gap-4 text-sm text-gray-500 mt-1">
                         <div className="flex items-center gap-1">
                           <Calendar className="h-3 w-3" />
                           <span>{formatDate(file.lastModified)}</span>
@@ -211,24 +283,38 @@ export default function DownloadPage() {
                       </div>
                     </div>
                   </div>
-                  <Button
-                    onClick={() => handleDownload(file.fileId)}
-                    disabled={downloadingFileId === file.fileId}
-                    size="sm"
-                    className="flex-shrink-0"
-                  >
-                    {downloadingFileId === file.fileId ? (
-                      <>
-                        <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                        Downloading...
-                      </>
-                    ) : (
-                      <>
-                        <Download className="mr-2 h-3 w-3" />
-                        Download
-                      </>
-                    )}
-                  </Button>
+                  <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+                    <Button
+                      onClick={() => handleDownload(file.fileId)}
+                      disabled={downloadingFileId === file.fileId}
+                      size="sm"
+                    >
+                      {downloadingFileId === file.fileId ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Downloading...
+                        </>
+                      ) : (
+                        <>
+                          <Download className="mr-2 h-4 w-4" />
+                          Download
+                        </>
+                      )}
+                    </Button>
+                                        <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openDeleteDialog(file)}
+                      disabled={deletingFileId === file.fileId}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                    >
+                      {deletingFileId === file.fileId ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -236,59 +322,40 @@ export default function DownloadPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Download className="h-5 w-5" />
-            Manual Download
-          </CardTitle>
-          <CardDescription>Enter a specific file ID to download</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="fileId" className="text-sm font-medium text-gray-900">
-              File ID
-            </Label>
-            <Input
-              id="fileId"
-              type="text"
-              placeholder="Enter your file ID (e.g., 4027)"
-              value={fileId}
-              onChange={(e) => setFileId(e.target.value)}
-              onKeyPress={handleKeyPress}
-              disabled={downloading}
-              className="text-lg"
-            />
-            <p className="text-sm text-gray-500">This is the ID you received when you uploaded your file</p>
-          </div>
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-red-600" />
+              Delete File
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <span className="font-medium">"{fileToDelete?.fileName}"</span>? This
+              action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => fileToDelete && handleDeleteFile(fileToDelete)}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+            >
+              Delete File
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
-          <Button onClick={handleDownload} disabled={!fileId.trim() || downloading} className="w-full" size="lg">
-            {downloading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Downloading...
-              </>
-            ) : (
-              <>
-                <Download className="mr-2 h-4 w-4" />
-                Download File
-              </>
-            )}
-          </Button>
-        </CardContent>
-      </Card>
-
-      {/* Success Message */}
       {downloadSuccess && (
         <Alert className="border-green-200 bg-green-50">
           <CheckCircle className="h-4 w-4 text-green-600" />
           <AlertDescription className="text-green-800">
             <div className="space-y-2">
-              <p className="font-medium">Download successful!</p>
+              <p className="font-medium">Download completed successfully!</p>
               <div className="flex items-center gap-2 rounded bg-white p-3 border border-green-200">
                 <FileText className="h-4 w-4 text-gray-600" />
                 <div>
-                  <p className="text-sm text-gray-600">Downloaded file:</p>
+                  <p className="text-sm text-gray-600">Downloaded:</p>
                   <p className="font-medium text-black">{downloadSuccess}</p>
                 </div>
               </div>
@@ -298,31 +365,16 @@ export default function DownloadPage() {
         </Alert>
       )}
 
-      {/* Error Display */}
       {error && (
         <Alert className="border-red-200 bg-red-50">
           <AlertCircle className="h-4 w-4 text-red-600" />
           <AlertDescription className="text-red-800">
-            <p className="font-medium">Download failed</p>
+            <p className="font-medium">Operation failed</p>
             <p className="text-sm mt-1">{error}</p>
-            <p className="text-sm mt-2 text-gray-600">Please check that the file ID is correct and try again.</p>
+            <p className="text-sm mt-2 text-gray-600">Please try again or contact support if the problem persists.</p>
           </AlertDescription>
         </Alert>
       )}
-
-      {/* Instructions */}
-      <Card className="bg-gray-50">
-        <CardContent className="pt-6">
-          <div className="space-y-3">
-            <h3 className="font-medium text-gray-900">How to download:</h3>
-            <ol className="list-decimal list-inside space-y-1 text-sm text-gray-600">
-              <li>Enter the file ID you received after uploading</li>
-              <li>Click the "Download File" button</li>
-              <li>The file will be automatically downloaded to your device</li>
-            </ol>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   )
 }
