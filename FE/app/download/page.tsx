@@ -226,7 +226,7 @@ export default function DownloadPage() {
               size="sm"
               onClick={toggleSort}
               className="flex items-center gap-2 px-3 py-2 h-10 text-sm bg-transparent whitespace-nowrap"
-                          >
+            >
               <ArrowUpDown className="h-3 w-3" />
               {sortOrder === "desc" ? "Newest" : "Oldest"}
             </Button>
@@ -265,16 +265,21 @@ export default function DownloadPage() {
               {filteredFiles.map((file) => (
                 <div
                   key={file.fileId}
-                  className="group flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:border-gray-300 hover:bg-gray-50 transition-all duration-200"
+                  className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-gray-200 rounded-lg hover:border-gray-300 hover:bg-gray-50 transition-all duration-200 gap-3 sm:gap-4 w-full overflow-hidden"
                 >
-                  <div className="flex items-center gap-4 flex-1 min-w-0">
+                  <div className="flex items-center gap-4 flex-1 min-w-0 overflow-hidden">
                     <div className="flex-shrink-0">
                       <div className="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center group-hover:bg-gray-200 transition-colors">
                         <FileText className="h-5 w-5 text-gray-600" />
                       </div>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-gray-900 truncate text-lg">{file.fileName}</p>
+                    <div className="min-w-0 flex-1 overflow-hidden">
+                      <p
+                        className="font-medium text-gray-900 truncate sm:text-lg text-base cursor-help block w-full"
+                        title={file.fileName}
+                      >
+                        {file.fileName}
+                      </p>
                       <div className="flex items-center gap-4 text-sm text-gray-500 mt-1">
                         <div className="flex items-center gap-1">
                           <Calendar className="h-3 w-3" />
@@ -283,11 +288,25 @@ export default function DownloadPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto sm:flex-shrink-0 sm:max-w-[200px]">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openDeleteDialog(file)}
+                      disabled={deletingFileId === file.fileId}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 w-full sm:w-auto sm:min-w-[44px]"
+                    >
+                      {deletingFileId === file.fileId ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                    </Button>
                     <Button
                       onClick={() => handleDownload(file.fileId)}
                       disabled={downloadingFileId === file.fileId}
                       size="sm"
+                      className="w-full sm:w-auto sm:min-w-[100px]"
                     >
                       {downloadingFileId === file.fileId ? (
                         <>
@@ -299,19 +318,6 @@ export default function DownloadPage() {
                           <Download className="mr-2 h-4 w-4" />
                           Download
                         </>
-                      )}
-                    </Button>
-                                        <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openDeleteDialog(file)}
-                      disabled={deletingFileId === file.fileId}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                    >
-                      {deletingFileId === file.fileId ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Trash2 className="h-4 w-4" />
                       )}
                     </Button>
                   </div>
